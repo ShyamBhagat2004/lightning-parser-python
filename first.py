@@ -1,56 +1,86 @@
-import usb.core
-import usb.util
-import time
-import csv
+import re
 
-# Find the device (replace xxxx with your device's Vendor ID and Product ID)
-VENDOR_ID = 0x0403  # Replace with your device's Vendor ID
-PRODUCT_ID = 0xf241 # Replace with your device's Product ID
+# Sample data - Replace this with your actual data source
+sample_data = """
+$LGT,12345,123456,12,34.5,56.7*6A
+$LGT,12346,123457,13,34.6,56.8*6B
+"""
 
-dev = usb.core.find(idVendor=VENDOR_ID, idProduct=PRODUCT_ID)
+# Regular expression to match NMEA style sentences
+nmea_regex = re.compile(r'\$LGT,\d+,\d+,\d+,\d+\.\d+,\d+\.\d+\*[0-9A-F]{2}')
 
-if dev is None:
-    raise ValueError("Device not found")
+def parse_nmea_sentence(sentence):
+    """Parse a single NMEA sentence."""
+    if not nmea_regex.match(sentence):
+        raise ValueError("Invalid NMEA sentence")
 
-# Detach kernel driver if necessary
-if dev.is_kernel_driver_active(0):
-    dev.detach_kernel_driver(0)
+    # Split the sentence by commas and remove the starting $
+    parts = sentence[1:].split(',')
 
-# Set the active configuration
-dev.set_configuration()
+    # Remove the checksum part after '*'
+    checksum_index = parts[-1].find('*')
 
-# Get endpoint instance
-cfg = dev.get_active_configuration()
-intf = cfg[(0, 0)]
 
-# Assuming the device has one IN endpoint
-ep = usb.util.find_descriptor(
-    intf,
-    # match the first IN endpoint
-    custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
-)
 
-assert ep is not None
 
-# Initialize data storage
-data_list = []
 
-# Read data for 10 seconds
-start_time = time.time()
-try:
-    while time.time() - start_time < 10:
-        data = dev.read(ep.bEndpointAddress, ep.wMaxPacketSize)
-        data_list.append(data.tolist())
-except KeyboardInterrupt:
-    print("Exiting...")
 
-# Release the device
-usb.util.release_interface(dev, intf)
 
-# Write data to a CSV file
-with open('usb_data.csv', 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(["Data"])  # Write header
-    writer.writerows(data_list)
 
-print("Data collection complete. Data written to usb_data.csv")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    if checksum_index != -1:
+        parts[-1] = parts[-1][:checksum_index]
+
+    return {
+        "Talker": parts[0],
+        "ID1": parts[1],
+        "ID2": parts[2],
+        "Data1": parts[3],
+        "Latitude": parts[4],
+        "Longitude": parts[5],
+    }
+
+def parse_nmea_data(data):
+    """Parse NMEA data containing multiple sentences."""
+    sentences = data.strip().split('\n')
+    parsed_data = []
+
+    for sentence in sentences:
+        try:
+            parsed_sentence = parse_nmea_sentence(sentence)
+            parsed_data.append(parsed_sentence)
+        except ValueError as e:
+            print(f"Skipping invalid sentence: {sentence}. Error: {e}")
+
+    return parsed_data
+
+# Parse the sample data
+parsed_data = parse_nmea_data(sample_data)
+
+# Display the parsed data
+for entry in parsed_data:
+    print(entry)
